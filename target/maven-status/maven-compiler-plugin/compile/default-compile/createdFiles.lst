@@ -1,0 +1,7 @@
+com/example/urlshortener/dto/urlRequest.class
+com/example/urlshortener/service/urlService.class
+com/example/urlshortener/UrlShortenerApplication.class
+com/example/urlshortener/model/urlMapping.class
+com/example/urlshortener/repository/urlRepository.class
+com/example/urlshortener/dto/urlResponse.class
+com/example/urlshortener/controller/urlController.class

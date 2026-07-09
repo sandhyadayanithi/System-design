@@ -1,0 +1,7 @@
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/UrlShortenerApplication.java
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/controller/urlController.java
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/dto/urlRequest.java
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/dto/urlResponse.java
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/model/urlMapping.java
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/repository/urlRepository.java
+/home/devgokul/shalini/SYS_DESIGN/System-design-main/UrlShortener/src/main/java/com/example/urlshortener/service/urlService.java
