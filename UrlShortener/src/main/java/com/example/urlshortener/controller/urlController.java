@@ -25,19 +25,22 @@ public class urlController {
         String shortUrl =
                 service.createShortUrl(request.getLongUrl());
 
-        return new urlResponse("http://localhost:8080/" + shortUrl);
+        return new urlResponse("http://localhost:8081/" + shortUrl);
     }
 
     @GetMapping("/{shortCode}")
-    public ResponseEntity<Void> redirect(@PathVariable String shortUrl) {
+    public ResponseEntity<Void> redirect(
+            @PathVariable String shortCode) {
 
-        String longUrl = service.getLongUrl(shortUrl);
+        String longUrl = service.getLongUrl(shortCode);
 
-        if(longUrl == null) {
+        if (longUrl == null) {
             return ResponseEntity.notFound().build();
         }
 
-        return ResponseEntity.status(302).location(URI.create(longUrl)).build();
+        return ResponseEntity.status(302)
+                .location(URI.create(longUrl))
+                .build();
     }
 }
 

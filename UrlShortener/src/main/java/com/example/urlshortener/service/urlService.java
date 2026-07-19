@@ -39,11 +39,11 @@ public class urlService {
         return shortUrl;
     }
 
-    public String getLongUrl(String shortUrl)
-    {
-        return repo.findByLongUrl(shortUrl).map(urlMapping::getLongUrl).orElse(null);
-
-    }
+    public String getLongUrl(String shortUrl){
+    	return repo.findByShortUrl(shortUrl)
+               	.map(urlMapping::getLongUrl)
+               	.orElse(null);
+	}
 
     private String generateShortUrl(String longUrl)
     {
