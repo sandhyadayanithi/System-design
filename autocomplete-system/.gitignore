@@ -1,0 +1,5 @@
+target/
+*.jtl
+report-output/
+.idea/
+*.iml

@@ -1,0 +1,27 @@
+# Option B — app only; reuses a Redis container you already have running.
+#
+# Both containers must share one user-defined bridge network so Docker's embedded
+# DNS can resolve your Redis container by name:
+#
+#   docker network create redis-net
+#   docker network connect redis-net autocomplete-redis
+#
+#   REDIS_NETWORK=redis-net REDIS_HOST=autocomplete-redis REDIS_PORT=6379 \
+#     docker compose -f docker-compose.external-redis.yml up --build -d
+services:
+  app:
+    build: .
+    container_name: autocomplete-app
+    environment:
+      REDIS_HOST: ${REDIS_HOST:-autocomplete-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-300}
+    ports:
+      - "8080:8080"
+    networks:
+      - external-redis
+
+networks:
+  external-redis:
+    name: ${REDIS_NETWORK:-redis-net}
+    external: true

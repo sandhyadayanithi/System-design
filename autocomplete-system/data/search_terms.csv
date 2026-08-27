@@ -1,0 +1,100 @@
+term,frequency
+apple,9500
+app store,8900
+application form,7200
+appointment,6100
+application software,5400
+apply online,4800
+applied physics,3100
+appetizer,2600
+appliance repair,2200
+approval process,1900
+apps for students,1700
+apparel store,1500
+appraisal report,1300
+approximate value,1100
+apricot,900
+data structures,9800
+database design,9300
+data science course,8700
+data analytics,8100
+dataset download,6900
+data mining,6400
+database indexing,5800
+data engineer jobs,5200
+data visualization,4700
+database sharding,3900
+data compression,3200
+docker compose,9100
+docker tutorial,8600
+docker networking,7000
+docker volumes,5900
+documentation tools,4300
+document scanner,3600
+dockerfile example,3300
+domain name search,2900
+download manager,2500
+redis cache,9600
+redis cluster,8800
+redis persistence,7500
+redis pub sub,6300
+redis vs memcached,5600
+redis sorted set,4500
+redis sentinel,3800
+reduce image size,3000
+refactoring patterns,2400
+regular expression,2100
+spring boot,9900
+spring boot redis,9000
+spring data jpa,8400
+spring security,7800
+spring cloud,6700
+spring boot actuator,5500
+spring webflux,4900
+spring boot docker,4100
+sports news,3400
+spreadsheet formulas,2800
+system design,9700
+system design interview,9200
+system architecture,7600
+synchronization primitives,5100
+syntax highlighting,4000
+sql joins,8300
+sql injection,7100
+sqlite tutorial,5300
+scalability patterns,6600
+search engine optimization,6000
+searching algorithms,4600
+sorting algorithms,7300
+socket programming,3700
+software testing,6800
+load balancer,8500
+load testing jmeter,6200
+locking mechanisms,4400
+logging framework,3500
+low latency systems,2700
+machine learning,9400
+microservices architecture,8900
+message queue,7400
+memory management,5700
+mongodb tutorial,6500
+monitoring dashboard,4200
+maven build,3100
+cache invalidation,8000
+caching strategies,7700
+cache eviction policy,5000
+cassandra database,4400
+concurrency control,6100
+consistent hashing,5500
+containers vs vms,3300
+content delivery network,2900
+trie data structure,7900
+trie vs hashmap,4800
+top k elements,5200
+throughput analysis,3800
+thread pool,4600
+transaction isolation,3400
+autocomplete api,6900
+auto scaling,5100
+authentication token,4300
+availability zones,2300

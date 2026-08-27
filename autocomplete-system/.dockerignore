@@ -1,0 +1,7 @@
+target/
+.git/
+jmeter/
+postman/
+data/
+*.jtl
+report-output/

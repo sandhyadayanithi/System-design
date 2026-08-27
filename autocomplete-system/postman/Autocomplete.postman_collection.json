@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "Autocomplete Search System",
+    "description": "Trie + Redis autocomplete service (UCS3513 Lab Exercise 7). Run the requests in order: the first 'app' lookup is served by the Trie, the repeat is served from the Redis cache.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('status is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+              "pm.test('trie is loaded', () => pm.expect(pm.response.json().trieSize).to.be.above(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Autocomplete 'app' (first call -> TRIE)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/autocomplete?prefix=app&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "autocomplete"],
+          "query": [
+            { "key": "prefix", "value": "app" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('suggestions returned', () => pm.expect(body.suggestions.length).to.be.above(0));",
+              "pm.test('every suggestion starts with the prefix', () => body.suggestions.forEach(s => pm.expect(s.term).to.include('app')));",
+              "pm.test('sorted by frequency desc', () => {",
+              "  for (let i = 1; i < body.suggestions.length; i++) {",
+              "    pm.expect(body.suggestions[i - 1].frequency).to.be.at.least(body.suggestions[i].frequency);",
+              "  }",
+              "});",
+              "console.log('served from: ' + body.source + ' in ' + body.tookMillis + ' ms');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Autocomplete 'app' again (expect CACHE)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/autocomplete?prefix=app&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "autocomplete"],
+          "query": [
+            { "key": "prefix", "value": "app" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('served from the Redis cache', () => pm.expect(pm.response.json().source).to.eql('CACHE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Autocomplete 'data' (limit=5)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/autocomplete?prefix=data&limit=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "autocomplete"],
+          "query": [
+            { "key": "prefix", "value": "data" },
+            { "key": "limit", "value": "5" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('top-K honoured', () => pm.expect(pm.response.json().suggestions.length).to.be.at.most(5));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Autocomplete 'redis'",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/autocomplete?prefix=redis&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "autocomplete"],
+          "query": [
+            { "key": "prefix", "value": "redis" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Unknown prefix (empty result)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/autocomplete?prefix=zzzz&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "autocomplete"],
+          "query": [
+            { "key": "prefix", "value": "zzzz" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('no suggestions', () => pm.expect(pm.response.json().count).to.eql(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Missing prefix parameter (expect 400)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/autocomplete",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "autocomplete"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Actuator health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["actuator", "health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+          }
+        }
+      ]
+    }
+  ]
+}

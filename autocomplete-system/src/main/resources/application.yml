@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: autocomplete-system
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      connect-timeout: 2000ms
+
+server:
+  port: ${SERVER_PORT:8080}
+
+autocomplete:
+  dataset: ${DATASET_LOCATION:classpath:data/search_terms.csv}
+  cache:
+    ttl-seconds: ${CACHE_TTL_SECONDS:300}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.example.autocomplete: INFO
