@@ -1,0 +1,22 @@
+### Clear crawler state
+DELETE http://localhost:8081/crawler/state
+
+
+### Start crawler
+POST http://localhost:8081/crawler/start?seedUrl=http://host.docker.internal:9000/page1.html
+
+
+### Check crawler status
+GET http://localhost:8081/crawler/status
+
+
+### Get visited URLs
+GET http://localhost:8081/crawler/visited
+
+
+### Get discovered URLs
+GET http://localhost:8081/crawler/discovered
+
+
+### Health check
+GET http://localhost:8081/crawler/health

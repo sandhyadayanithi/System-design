@@ -1,0 +1,9 @@
+com\example\webcrawler\controller\CrawlerController.class
+com\example\webcrawler\service\UrlQueue.class
+com\example\webcrawler\model\CrawlStatus.class
+com\example\webcrawler\config\RedisConfig.class
+com\example\webcrawler\service\UrlValidator.class
+com\example\webcrawler\service\VisitedUrlService.class
+com\example\webcrawler\service\CrawlerService.class
+com\example\webcrawler\WebcrawlerApplication.class
+com\example\webcrawler\service\CrawlStateService.class
