@@ -1,16 +1,16 @@
-services:
 
+services:
   configsvr:
     image: mongo:7.0
     container_name: configsvr
-    command: mongod --configsvr --replSet configReplSet --port 27019
+    command: mongod --configsvr --replSet configReplSet --port 27019 --bind_ip_all
     volumes:
       - configdb:/data/db
 
   shard1:
     image: mongo:7.0
     container_name: shard1
-    command: mongod --shardsvr --replSet shard1ReplSet --port 27018
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --bind_ip_all
     ports:
       - "27018:27018"
     volumes:
@@ -19,7 +19,7 @@ services:
   shard2:
     image: mongo:7.0
     container_name: shard2
-    command: mongod --shardsvr --replSet shard2ReplSet --port 27020
+    command: mongod --shardsvr --replSet shard2ReplSet --port 27020 --bind_ip_all
     ports:
       - "27020:27020"
     volumes:
@@ -33,6 +33,8 @@ services:
       - shard1
       - shard2
     command: mongos --configdb configReplSet/configsvr:27019 --bind_ip_all
+    ports:
+      - "27017:27017"
 
 volumes:
   configdb:
