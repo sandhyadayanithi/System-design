@@ -1,461 +1,663 @@
-# Distributed Web Crawler — Redis Frontier with Dynamic Web Content Discovery
+# Web Crawler — Spring Boot, Redis & JSoup
 
-> **UCS3513 System Design Laboratory — Lab Exercise 8**  
-> *Design and Develop a Web Crawler for Automated Web Content Discovery*
+An asynchronous, breadth-first-search (BFS) web crawler built using Spring Boot and JSoup. It supports job-based crawling, Redis-backed state management, domain restrictions, depth and page limits, failure tracking, and API-based monitoring.
 
----
+## Features
 
-## A. Purpose
+- Asynchronous BFS crawling
+- Redis-backed queue and job state, with in-memory fallback
+- Visited, discovered, queued, and failed URL tracking
+- Configurable maximum pages and crawl depth
+- Domain restriction and HTTP/HTTPS URL validation
+- Request timeout and politeness delay
+- REST APIs for starting and monitoring crawl jobs
+- Postman API testing
+- JMeter load testing
+- Local HTML dataset for predictable testing
 
-This project implements a fully dynamic, asynchronous **Distributed Web Crawler** built with **Spring Boot**, **JSoup**, and **Redis**. The primary system design concept demonstrated is the **Web Crawler Architecture with Distributed Visited Tracking, Frontier Queueing, and Domain-Boundary Traversal Control**. 
+## Tech Stack
 
-The system accepts seed URLs dynamically via REST APIs, manages an asynchronous BFS frontier queue, extracts and normalizes hyperlinks across arbitrary DOM depths, enforces configurable crawl budgets (maximum pages and max depth), restricts requests to permitted domains to prevent infinite internet crawling, and leverages Redis for atomic, O(1) URL deduplication across concurrent threads and jobs.
+- Java and Spring Boot
+- Maven
+- JSoup
+- Redis
+- Docker Compose
+- Python HTTP server for the test dataset
+- Postman
+- Apache JMeter
 
+## Project Structure
+
+```text
+webcrawler/
+├── crawler_dataset/
+│   ├── page1.html
+│   ├── page2.html
+│   ├── page3.html
+│   ├── page4.html
+│   ├── error-demo.html
+│   └── section/
+│       ├── page5.html
+│       ├── page6.html
+│       └── page7.html
+├── postman/
+│   └── WebCrawler.postman_collection.json
+├── jmeter/
+│   └── webcrawler_test_plan.jmx
+├── docker-compose.yml
+├── mvnw
+└── README.md
 ```
- Client ──POST /crawler/start {seedUrl, maxPages, maxDepth, allowedDomain}──▶ CrawlerController
-                                                                                    │
-                                                                   @Async CrawlerService.crawl()
-                                                                                    │
-  ┌─────────────────────────────────────────────────────────────────────────────────┴───────────────────────────────────────────────────────┐
-  ▼                                                                                                                                         ▼
-[Redis Frontier Queue]                                                                                                            [Redis Visited Set]
-crawler:job:{id}:queue                                                                                                           crawler:job:{id}:visited
- (List: CrawlTask)                                                                                                                  (Set: Normalized URLs)
-  │                                                                                                                                         ▲
-  ▼                                                                                                                                         │
-dequeue() ──▶ Check Depth <= maxDepth ──▶ Atomic Visit Check (SADD) ──▶ [Already Visited?] ──YES──▶ (Skip)                                 │
-                                                  │                                                                                         │
-                                                [NO] (Fresh URL) ───────────────────────────────────────────────────────────────────────────┘
-                                                  ▼
-                                      Politeness Delay (e.g. 50ms)
-                                                  ▼
-                                      JSoup.connect(url).get()
-                                                  │
-                                      Extract <a href="..."> tags
-                                                  │
-                                      UrlValidator.isValid() & normalize()
-                                                  │
-                                      Check Permitted Domain (allowedDomain)
-                                                  │
-                                                  ▼
-                                      Atomic Discovery Check (SADD)
-                                      crawler:job:{id}:discovered
-                                                  │
-                                        [Freshly Discovered?]
-                                         ├── NO  ──▶ Ignore (Duplicate Link)
-                                         └── YES ──▶ Check (depth + 1 <= maxDepth)
-                                                      └── Enqueue CrawlTask(childUrl, depth + 1)
+
+Verify the actual filenames and directory structure in your checkout.
+
+## Architecture
+
+1. A client submits a crawl request through the REST API.
+2. The crawler initializes a job and queues its seed URL.
+3. URLs are processed asynchronously using BFS.
+4. JSoup fetches HTML pages and extracts links.
+5. Valid links are checked against domain, depth, and page limits.
+6. Redis stores job metadata, queues, discovered URLs, visited URLs, and failures.
+7. REST APIs expose job status and crawl results.
+
+### Redis Key Pattern
+
+```text
+crawler:jobs
+crawler:active_jobs
+crawler:latest_job
+crawler:job:{jobId}:meta
+crawler:job:{jobId}:queue
+crawler:job:{jobId}:visited
+crawler:job:{jobId}:discovered
+crawler:job:{jobId}:failed
 ```
 
----
+## Prerequisites
 
-## B. Prerequisites and setup
+Install or configure the following:
 
-### Required Tools & Versions
-- **Java JDK**: 17 or higher (`java -version`)
-- **Maven**: 3.6+ or included Maven Wrapper (`mvnw.cmd` / `./mvnw`)
-- **Docker Engine & Docker Compose**: CLI runtime (`docker --version`, `docker compose version`)
-- **Python 3**: For hosting the local controlled test dataset (`python --version`)
-- **Redis**: 7-alpine running via Docker on port `6379`
+- Java (compatible with the project's configured version)
+- Docker Engine and Docker Compose
+- Python 3
+- Maven Wrapper included in the project
+- Postman (optional, for API testing)
+- Apache JMeter (optional, for load testing)
 
-### Step-by-Step Setup Commands
+Check your installations:
 
-#### 1. Navigate to Project Directory
-- **PowerShell (Windows)**:
-  ```powershell
-  cd c:\Users\sandh\Documents\sem5\System-design\webcrawler
-  ```
-- **Ubuntu / Linux**:
-  ```bash
-  cd webcrawler
-  ```
+```bash
+java -version
+python3 --version
+docker --version
+docker compose version
+```
 
-#### 2. Start the Local Controlled Dataset Web Server (Terminal 1)
-To ensure the crawler operates in a safe, controlled sandbox without crawling the live internet, serve the included interconnected test pages on port `9000`:
-- **PowerShell (Windows)**:
-  ```powershell
-  python -m http.server 9000 --directory crawler_dataset
-  ```
-- **Ubuntu / Linux**:
-  ```bash
-  python3 -m http.server 9000 --directory crawler_dataset
-  ```
+From the project root:
 
-#### 3. Start Redis (Terminal 2)
-- **PowerShell / Ubuntu**:
-  ```bash
-  docker compose up -d redis
-  ```
-- Verify Redis is responding:
-  ```bash
-  docker exec -it webcrawler-redis redis-cli ping
-  ```
-  *(Expected: `PONG`)*
+```bash
+cd ~/Documents/sem5/System-design/webcrawler
+```
 
----
+Replace this path with the actual location of your project on Ubuntu.
 
-## C. Docker setup (terminal only)
+## 1. Start Redis
 
-The project includes a multi-stage `Dockerfile` and `docker-compose.yml` orchestrating Redis and the crawler service.
+Open **Terminal 1**:
 
-### Docker Engine Verification
-- **PowerShell**:
-  ```powershell
-  docker version
-  docker ps
-  ```
-- **Ubuntu / Linux**:
-  ```bash
-  docker version
-  docker ps
-  ```
+```bash
+cd ~/Documents/sem5/System-design/webcrawler
+docker compose up -d redis
+docker compose ps
+docker exec -it webcrawler-redis redis-cli ping
+```
 
-### Services Defined in `docker-compose.yml`
+Expected Redis response:
 
-| Service Name | Container Name | Image / Build | Port Mapping | Healthcheck / Dependency |
-|---|---|---|---|---|
-| `redis` | `webcrawler-redis` | `redis:7-alpine` | `6379:6379` | `redis-cli ping` (interval: 5s) |
-| `webcrawler` | `webcrawler-app` | Built from `Dockerfile` | `8081:8081` | Depends on healthy redis |
+```text
+PONG
+```
 
-### Container Lifecycle Commands
-- **Build and start both services**:
-  ```bash
-  docker compose up --build -d
-  ```
-- **Inspect application container logs**:
-  ```bash
-  docker compose logs -f webcrawler
-  ```
-- **Inspect Redis keys inside container**:
-  ```bash
-  docker exec -it webcrawler-redis redis-cli KEYS "crawler:*"
-  docker exec -it webcrawler-redis redis-cli SMEMBERS "crawler:jobs"
-  ```
-- **Stop services**:
-  ```bash
-  docker compose stop
-  ```
-- **Tear down containers and volumes**:
-  ```bash
-  docker compose down -v
-  ```
+### If port 6379 is already in use
 
----
+Check which container publishes port 6379:
 
-## D. Run the application
+```bash
+docker ps --filter "publish=6379"
+```
 
-### Option 1: Native Execution with Maven Wrapper (Recommended for Local Testing)
-Ensure Redis is running (`docker compose up -d redis`).
+Check processes listening on the port:
 
-- **PowerShell (Windows)**:
-  ```powershell
-  .\mvnw.cmd spring-boot:run
-  ```
-- **Ubuntu / Linux**:
-  ```bash
-  ./mvnw spring-boot:run
-  ```
+```bash
+sudo ss -ltnp | grep ':6379'
+```
 
-### Option 2: Run via Docker Compose
-When running inside Docker, the crawler accesses host-hosted test datasets using `http://host.docker.internal:9000/page1.html`.
+Stop a conflicting container only if it is safe to do so.
+
+Alternatively, change the Redis host port mapping in `docker-compose.yml` to:
+
+```yaml
+ports:
+  - "6380:6379"
+```
+
+If the Spring Boot application runs directly on Ubuntu, update its Redis connection configuration to use port `6380`.
+
+Then recreate Redis:
+
+```bash
+docker compose up -d --force-recreate redis
+docker compose ps
+docker compose port redis 6379
+```
+
+Verify the actual container name before using commands that reference `webcrawler-redis`.
+
+## 2. Start the Local HTML Dataset Server
+
+Open **Terminal 2**:
+
+```bash
+cd ~/Documents/sem5/System-design/webcrawler
+python3 -m http.server 9000 --directory crawler_dataset
+```
+
+Keep this terminal running.
+
+Test the dataset in your browser:
+
+```text
+http://localhost:9000/page1.html
+```
+
+The crawler's seed URL will use this local server.
+
+## 3. Start the Spring Boot Application
+
+Open **Terminal 3**:
+
+```bash
+cd ~/Documents/sem5/System-design/webcrawler
+chmod +x mvnw
+./mvnw spring-boot:run
+```
+
+Keep this terminal running.
+
+The application is expected to run on port `8081`, subject to the project's configuration.
+
+## 4. Test the Health Endpoint Using Postman
+
+Open Postman and create a new HTTP request.
+
+- Method: `GET`
+- URL: `http://localhost:8081/crawler/health`
+
+Click **Send**.
+
+Verify that the application responds successfully.
+
+## 5. Configure Postman Collection Variables
+
+Import the collection:
+
+```text
+postman/WebCrawler.postman_collection.json
+```
+
+Set these collection variables:
+
+| Variable | Value |
+|---|---|
+| `baseUrl` | `http://localhost:8081` |
+| `jobId` | `lab8-postman-test` |
+| `seedUrl` | `http://localhost:9000/page1.html` |
+
+## 6. Start a Crawl Job Using Postman
+
+Create a new request with the following configuration:
+
+- Method: `POST`
+- URL: `{{baseUrl}}/crawler/start`
+- Body: **raw → JSON**
+- Header: `Content-Type: application/json`
+
+Request body:
+
+```json
+{
+  "seedUrl": "http://localhost:9000/page1.html",
+  "jobId": "lab8-postman-test",
+  "maxPages": 15,
+  "maxDepth": 3,
+  "allowedDomain": "localhost",
+  "stayOnDomain": true,
+  "requestTimeoutMs": 5000,
+  "politenessDelayMs": 50
+}
+```
+
+Click **Send** and inspect the response.
+
+All integer fields must contain numeric values rather than `null`.
+
+## 7. Check Crawl Status
+
+After starting the crawl, create the following requests in Postman.
+
+### A. Get Job Status
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/status?jobId={{jobId}}`
+
+### B. Get Job Details
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/jobs/{{jobId}}`
+
+Inspect the response for the job ID, seed URL, status, page limits, and crawl progress.
+
+## 8. Inspect Crawling Results Using Postman
+
+### A. Visited URLs
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/visited?jobId={{jobId}}&page=0&size=20`
+
+### B. Discovered URLs
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/discovered?jobId={{jobId}}&page=0&size=20`
+
+### C. Queue
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/queue?jobId={{jobId}}&page=0&size=20`
+
+### D. Failed URLs
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/failed?jobId={{jobId}}`
+
+### E. List All Jobs
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/jobs`
+
+### F. Get Job Status Through the Job-Specific Endpoint
+
+- Method: `GET`
+- URL: `{{baseUrl}}/crawler/jobs/{{jobId}}/status`
+
+For each request, click **Send** and inspect the response body and HTTP status code.
+
+## 9. Expected Dataset Behavior
+
+The test dataset contains linked pages for validating BFS traversal and depth restrictions.
+
+- `page1.html` links to pages such as `page2.html`, `page3.html`, and `error-demo.html`.
+- `page2.html` and `page3.html` link to `page4.html` and `section/page5.html`.
+- `page4.html` and `page5.html` link to `section/page6.html`.
+- `section/page6.html` links to `section/page7.html`.
+- The missing `does-not-exist-404.html` page can be used to test failure tracking.
+- External and non-HTTP links should be rejected according to the crawler's URL validation rules.
+
+With `maxDepth = 3`, `page7.html` should not be fetched if it is at depth 4 under the dataset's link structure.
+
+Actual results depend on the implementation's depth convention, URL normalization, and asynchronous processing.
+
+## 10. Delete Job State Using Postman
+
+Run this request only after completing the other tests.
+
+- Method: `DELETE`
+- URL: `{{baseUrl}}/crawler/jobs/{{jobId}}/state`
+
+Click **Send** and inspect the response.
+
+## 11. Run Automated Tests
+
+Open a new Ubuntu terminal in the project root:
+
+```bash
+./mvnw test
+```
+
+Build the project:
+
+```bash
+./mvnw clean package
+```
+
+Review the actual Maven output to confirm whether the tests pass.
+
+## 12. Run with Docker Compose
+
+If your Docker Compose configuration includes the Spring Boot application service:
+
 ```bash
 docker compose up --build -d
+docker compose ps
+docker compose logs -f
 ```
 
-### Configuration Parameters (`src/main/resources/application.properties`)
-- `server.port=8081`
-- `spring.data.redis.host=${SPRING_DATA_REDIS_HOST:localhost}`
-- `spring.data.redis.port=${SPRING_DATA_REDIS_PORT:6379}`
+If the Spring Boot app runs inside Docker, `localhost:9000` refers to the app container itself, not the Ubuntu host. Configure the seed URL to use an address reachable from the container, such as `http://host.docker.internal:9000/page1.html` where supported, and configure host-gateway networking if necessary.
 
-### Expected Startup Output
+If Compose only defines Redis, run the Python dataset server and Spring Boot application separately as described above.
+
+## 13. JMeter Load Testing
+
+Install Apache JMeter using your preferred Ubuntu installation method and ensure the `jmeter` command is available on your `PATH`.
+
+From the project directory:
+
+```bash
+cd ~/Documents/sem5/System-design/webcrawler/jmeter
+
+jmeter -n \
+  -t webcrawler_test_plan.jmx \
+  -Jhost=localhost \
+  -Jport=8081 \
+  -Jthreads=25 \
+  -Jrampup=5 \
+  -Jloops=10 \
+  -l results.jtl \
+  -e \
+  -o dashboard-report
+```
+
+The test results are written to `results.jtl`, and the HTML report is generated in `dashboard-report`.
+
+Ensure the output directory does not already exist before generating the report. Do not treat the configured thread count as a measured performance result; use the generated JMeter report to evaluate actual results.
+
+## Troubleshooting
+
+### Redis port conflict
+
+In Ubuntu, inspect port usage with:
+
+```bash
+sudo ss -ltnp | grep ':6379'
+docker ps --filter "publish=6379"
+```
+
+Resolve the port conflict or change the host port mapping and Spring Boot Redis configuration.
+
+### Docker is not running
+
+```bash
+docker info
+docker compose ps
+```
+
+Start Docker Engine using your Ubuntu installation's service configuration if necessary.
+
+### Python server is unavailable
+
+```bash
+python3 --version
+```
+
+Confirm that the dataset server is running in Terminal 2 and that `crawler_dataset/` exists. You can also open `http://localhost:9000/page1.html` in a browser.
+
+### Spring Boot application is unavailable
+
+Open the Spring Boot terminal and inspect the startup logs. Verify that the application is configured to use port `8081`.
+
+### Unsupported Content-Type
+
+In Postman, select **Body → raw → JSON** and ensure the request header is:
+
 ```text
-Tomcat started on port 8081 (http) with context path '/'
-Started WebcrawlerApplication in X.XXX seconds
+Content-Type: application/json
 ```
 
-### Verify Service Health
-- **PowerShell / Bash**:
-  ```bash
-  curl http://localhost:8081/crawler/health
-  ```
-  *Expected Output*:
-  ```json
-  {"status":"UP","redisConnected":true,"activeJobs":0,"latestJobId":"default"}
-  ```
+### Integer field parsing errors
 
----
+Provide numeric values for all required integer fields, including:
 
-## E. REST API documentation & testing
-
-### API Endpoints Summary
-
-| HTTP Method | Full Local URL | Purpose | Request Body / Query Params | Expected Status |
-|---|---|---|---|---|
-| `POST` | `http://localhost:8081/crawler/start` | Start asynchronous crawl job | JSON body or query params: `seedUrl`, `jobId`, `maxPages`, `maxDepth`, `allowedDomain` | `202 Accepted` |
-| `GET` | `http://localhost:8081/crawler/status` | Get status of latest or specified job | Query param: `jobId` (optional) | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/jobs/{jobId}` | Get comprehensive job metrics & timings | Path variable: `jobId` | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/jobs` | List all registered crawl jobs | None | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/visited` | Paginated list of visited URLs | `jobId`, `page`, `size` | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/discovered` | Paginated list of discovered URLs | `jobId`, `page`, `size` | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/queue` | Inspect pending frontier queue URLs | `jobId`, `page`, `size` | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/failed` | View inaccessible URLs & error reasons | `jobId` | `200 OK` |
-| `DELETE` | `http://localhost:8081/crawler/jobs/{jobId}/state` | Clear Redis state for a specific job | Path variable: `jobId` | `200 OK` |
-| `GET` | `http://localhost:8081/crawler/health` | Service health & Redis check | None | `200 OK` |
-
-### Copy-Pasteable Postman / Curl Examples
-
-#### 1. Start Crawl with Custom Limits (JSON Body)
-- **Method**: `POST`
-- **URL**: `http://localhost:8081/crawler/start`
-- **Header**: `Content-Type: application/json`
-- **Body**:
-  ```json
-  {
-    "seedUrl": "http://localhost:9000/page1.html",
-    "jobId": "exam-demo-job",
-    "maxPages": 25,
-    "maxDepth": 3,
-    "allowedDomain": "localhost",
-    "stayOnDomain": true,
-    "requestTimeoutMs": 3000,
-    "politenessDelayMs": 50
-  }
-  ```
-- **Expected Status**: `202 Accepted`
-- **Expected Response (JSON)**:
-  ```json
-  {
-    "jobId": "exam-demo-job",
-    "seedUrl": "http://localhost:9000/page1.html",
-    "status": "RUNNING",
-    "maxPages": 25,
-    "maxDepth": 3,
-    "allowedDomain": "localhost",
-    "pagesVisited": 0,
-    "pagesDiscovered": 0,
-    "pagesFailed": 0,
-    "queueSize": 0
-  }
-  ```
-
-#### 2. Inspect Job Progress & Results
-- **URL**: `http://localhost:8081/crawler/jobs/exam-demo-job`
-- **Method**: `GET`
-- **Expected Response**:
-  ```json
-  {
-    "jobId": "exam-demo-job",
-    "seedUrl": "http://localhost:9000/page1.html",
-    "status": "COMPLETED",
-    "maxPages": 25,
-    "maxDepth": 3,
-    "allowedDomain": "localhost",
-    "pagesVisited": 7,
-    "pagesDiscovered": 8,
-    "pagesFailed": 1,
-    "queueSize": 0,
-    "durationMs": 420,
-    "message": "Crawled 7 pages, discovered 8 URLs"
-  }
-  ```
-
-#### 3. Inspect Visited URLs with Pagination
-- **URL**: `http://localhost:8081/crawler/visited?jobId=exam-demo-job&page=0&size=5`
-- **Method**: `GET`
-- **Expected Response**:
-  ```json
-  {
-    "items": [
-      "http://localhost:9000/page1.html",
-      "http://localhost:9000/page2.html",
-      "http://localhost:9000/page3.html",
-      "http://localhost:9000/page4.html",
-      "http://localhost:9000/section/page5.html"
-    ],
-    "page": 0,
-    "size": 5,
-    "totalItems": 7,
-    "totalPages": 2
-  }
-  ```
-
-#### 4. Inspect Inaccessible / Failed URLs
-- **URL**: `http://localhost:8081/crawler/failed?jobId=exam-demo-job`
-- **Method**: `GET`
-- **Expected Response**:
-  ```json
-  {
-    "jobId": "exam-demo-job",
-    "failedCount": 1,
-    "failures": {
-      "http://localhost:9000/does-not-exist-404.html": "HTTP 404"
-    }
-  }
-  ```
-
----
-
-## F. Implementation explained
-
-### Source Files & Architecture
-
-| File Path | Component | Responsibility |
-|---|---|---|
-| `.../controller/CrawlerController.java` | REST Controller | Exposes endpoints for job lifecycle, query pagination, frontier queue inspection, and health check. |
-| `.../service/CrawlerService.java` | Async Crawl Engine | Orchestrates the BFS traversal loop; interacts with JSoup; enforces `maxPages`, `maxDepth`, and domain restrictions. |
-| `.../service/RedisCrawlStateService.java` | Redis State Manager | Manages Redis Keys (`visited`, `discovered`, `queue`, `failed`, `meta`) isolated by `jobId` with atomic Redis operations and memory fallback. |
-| `.../service/UrlValidator.java` | Validation & Normalizer | Strips hash fragments (`#...`), normalizes path dots (`..`), filters media assets (`.png`, `.pdf`), validates HTTP/HTTPS schemes, and checks domain restrictions. |
-| `.../model/CrawlRequest.java` | Request DTO | Configurable parameters: seed URL, max pages, max depth, allowed domain, timeouts, and politeness delay. |
-| `.../model/CrawlTask.java` | Queue Task | Encapsulates a URL waiting to be fetched along with its crawl depth and parent provenance. |
-| `.../model/CrawlJobDetails.java` | Job Metrics DTO | Real-time counts of visited, discovered, failed pages, queue length, timestamps, and duration. |
-
-### Core Algorithmic Workflow
-
-1. **Job Initialization**:
-   - Seed URL is validated and normalized (`UrlValidator.normalize()`).
-   - If `allowedDomain` is omitted and `stayOnDomain` is true, the domain is automatically locked to the seed host (`localhost`).
-   - Seed URL is marked discovered atomically and enqueued into `crawler:job:{id}:queue` as `CrawlTask(seed, depth=0)`.
-
-2. **Breadth-First Search (BFS) Frontier Traversal**:
-   - `dequeue()` pops the oldest task from the Redis List (`LPOP`).
-   - If task depth $> \text{maxDepth}$, the page is dropped.
-   - Atomically attempts to insert URL into Redis Set `crawler:job:{id}:visited` (`SADD`). If SADD returns 0, the page was already visited by another worker and is skipped.
-   - A politeness delay is observed (e.g. 50ms) to prevent server hammering.
-   - JSoup downloads the document: `Jsoup.connect(url).timeout(...).get()`.
-
-3. **Link Extraction, Normalization & Filtering**:
-   - Evaluates all `a[href]` tags with `link.absUrl("href")`.
-   - Filters out non-HTTP schemes (`mailto:`, `ftp:`, `javascript:`).
-   - Normalizes path and removes fragments (e.g., `page2.html#section` becomes `page2.html`).
-   - Filters out static binaries (`.jpg`, `.pdf`, `.zip`).
-   - Enforces domain boundary: ensures URL host matches `allowedDomain`.
-   - Performs atomic discovery check: `SADD crawler:job:{id}:discovered`.
-   - If newly discovered AND $(\text{depth} + 1) \le \text{maxDepth}$, enqueues `CrawlTask(child, depth + 1)`.
-
-4. **Termination Conditions**:
-   - Frontier queue is completely empty (`LPOP` returns null), OR
-   - Visited count reaches `maxPages`, OR
-   - Job is cancelled/stopped via API.
-
----
-
-## G. Dynamic test dataset guide
-
-The project includes an interconnected test site in `webcrawler/crawler_dataset/`:
-
-```
-crawler_dataset/
-├── page1.html                  # Seed (Depth 0): Links to Page 2, Page 3, external domain, error demo
-├── page2.html                  # Depth 1: Links to Page 4, section/page5.html, cycle back to Page 1
-├── page3.html                  # Depth 1: Links to Page 4, section/page5.html
-├── page4.html                  # Depth 2: Links to section/page6.html, back to Page 2
-├── error-demo.html             # Edge cases: Links to 404 nonexistent page, malformed URL, ftp
-└── section/
-    ├── page5.html              # Depth 2: Relative links (../page2.html)
-    ├── page6.html              # Depth 3: Deep link to page 7
-    └── page7.html              # Depth 4: Terminal page for maxDepth verification
+```json
+{
+  "maxPages": 15,
+  "maxDepth": 3,
+  "requestTimeoutMs": 5000,
+  "politenessDelayMs": 50
+}
 ```
 
-### Starting the Local Dataset Server
-- **PowerShell**:
-  ```powershell
-  python -m http.server 9000 --directory webcrawler\crawler_dataset
-  ```
-- **Ubuntu / Linux**:
-  ```bash
-  python3 -m http.server 9000 --directory webcrawler/crawler_dataset
-  ```
+Do not send `null` for required primitive integer fields.
 
----
+### Job metadata is IDLE or contains null fields
 
-## H. JMeter performance testing
+If a start request returns default metadata such as `status: IDLE`, `seedUrl: null`, `maxPages: 0`, or `maxDepth: 0`, verify the request DTO mapping and job initialization.
 
-The project includes a ready-to-run JMeter performance plan: `jmeter/webcrawler_test_plan.jmx`.
+Trace the request through:
 
-### Running in Non-GUI (CLI) Mode
+1. JSON deserialization
+2. `CrawlerController`
+3. `CrawlRequest`
+4. Job initialization
+5. Redis state storage
+6. Response serialization
+7. Asynchronous crawl execution
 
-- **PowerShell (Windows)**:
-  ```powershell
-  cd jmeter
-  jmeter -n -t webcrawler_test_plan.jmx `
-    -Jhost=localhost -Jport=8081 -Jthreads=25 -Jrampup=5 -Jloops=10 `
-    -l results.jtl `
-    -e -o dashboard-report
-  ```
+Try a new job ID to avoid confusing stale state with a new request. If the problem persists, fix the mapping or initialization logic and add a regression test verifying that the submitted seed URL, job ID, limits, and domain are persisted and that asynchronous crawling starts.
 
-- **Ubuntu / Linux**:
-  ```bash
-  cd jmeter
-  jmeter -n -t webcrawler_test_plan.jmx \
-    -Jhost=localhost -Jport=8081 -Jthreads=25 -Jrampup=5 -Jloops=10 \
-    -l results.jtl \
-    -e -o dashboard-report
-  ```
+## 14. Stop the Services
 
-### Parameters to Vary for Lab Evaluation:
-- `-Jthreads=1` : Baseline single-user response latency.
-- `-Jthreads=10` : Moderate concurrency.
-- `-Jthreads=25` : Heavy concurrent queries.
-- `-Jthreads=50` : Stress test verifying Redis Set and List lookup throughput.
+Stop the Python HTTP server and Spring Boot application with `Ctrl+C` in their respective terminals.
 
-### Metrics to Inspect in `dashboard-report/index.html`:
-- **Throughput (Requests/sec)**: Rate of queries handled across Redis sets.
-- **Average Response Time**: Sub-millisecond latency for cached Redis status checks.
-- **Error Percentage**: Must be `0.00%` (asserting HTTP 200 on all queries).
+Stop Redis:
 
----
-
-## I. Common errors and quick fixes
-
-1. **Error**: `Connection refused: localhost:6379`
-   - **Cause**: Redis container is not running.
-   - **Fix**: Run `docker compose up -d redis`.
-2. **Error**: `Seed page could not be reached / status FAILED`
-   - **Cause**: Python test dataset server on port 9000 is not running.
-   - **Fix**: Run `python -m http.server 9000 --directory crawler_dataset` in a separate terminal.
-3. **Error**: `409 Conflict: Crawl job <id> is already running`
-   - **Cause**: Triggered another start request with an identical active `jobId`.
-   - **Fix**: Wait for the job to finish, use a different `jobId`, or clear state via `DELETE /crawler/jobs/{jobId}/state`.
-4. **Error**: `Crawler runs indefinitely`
-   - **Cause**: Seed URL pointed to an external site with infinite links.
-   - **Fix**: Always specify `allowedDomain` or test with `http://localhost:9000/page1.html`.
-
----
-
-## J. Exam quick revision
-
-### Clean-Start Command Sequence (Exam Order)
-```powershell
-# 1. Start Redis
-docker compose up -d redis
-
-# 2. Start Test Website (in separate terminal)
-python -m http.server 9000 --directory crawler_dataset
-
-# 3. Start Web Crawler
-.\mvnw.cmd spring-boot:run
-
-# 4. Trigger Crawl
-Invoke-RestMethod -Uri "http://localhost:8081/crawler/start?seedUrl=http://localhost:9000/page1.html" -Method Post
-
-# 5. Check Status
-Invoke-RestMethod -Uri "http://localhost:8081/crawler/status"
+```bash
+docker compose stop redis
 ```
 
-### 3 Key Source Files to Remember
-1. `CrawlerService.java`: BFS crawl loop over `dequeue()`, JSoup link extraction, and depth checks.
-2. `RedisCrawlStateService.java`: Atomic `SADD` on `crawler:visited` and `crawler:discovered`.
-3. `UrlValidator.java`: Normalization (fragment stripping) and domain matching.
+To stop the full Compose stack, if applicable:
 
-### Likely Viva Questions & Answers
-- **Q1: How do you prevent circular link crawling (infinite loops)?**
-  *A*: Before crawling any page, the crawler checks and inserts the URL into a Redis Set (`SADD`). If SADD returns 0, the URL is already visited and skipped immediately.
-- **Q2: Why use Redis for the URL queue and visited set?**
-  *A*: Redis allows multiple crawler workers across different machines to share the frontier queue and deduplicate visited URLs in $O(1)$ time without duplicate crawls.
-- **Q3: What is URL normalization and why is it essential?**
-  *A*: Normalization strips anchor fragments (`#sec`), converts schemes and hosts to lowercase, and resolves relative path segments so that equivalent URLs (e.g., `page.html` and `page.html#top`) are not crawled as separate pages.
-
-### Cleanup Commands
-```powershell
-docker compose down -v
+```bash
+docker compose down
 ```
+
+## Verification Checklist
+
+- [ ] Redis starts and responds with `PONG`.
+- [ ] The local dataset is accessible on port `9000`.
+- [ ] Spring Boot starts on port `8081`.
+- [ ] The health endpoint responds successfully in Postman.
+- [ ] A crawl request creates and initializes the expected job.
+- [ ] Job metadata contains the submitted configuration.
+- [ ] BFS traversal discovers and visits expected URLs.
+- [ ] Depth and page limits are respected.
+- [ ] Failed URLs are tracked.
+- [ ] Postman requests return the expected results.
+- [ ] Maven tests and packaging complete successfully.
+- [ ] JMeter results are reviewed if load testing is required.
+
+**Note:** Verify endpoint paths, request DTO fields, Redis configuration, container names, and project structure against the current checkout. These instructions assume the previously described implementation and do not claim that the project has been independently tested on Ubuntu.
+
+
+## 9. Expected Dataset Behavior
+
+The test dataset contains linked pages for validating BFS traversal and depth restrictions.
+
+- `page1.html` links to pages such as `page2.html`, `page3.html`, and `error-demo.html`.
+- `page2.html` and `page3.html` link to `page4.html` and `section/page5.html`.
+- `page4.html` and `page5.html` link to `section/page6.html`.
+- `section/page6.html` links to `section/page7.html`.
+- The missing `does-not-exist-404.html` page can be used to test failure tracking.
+- External and non-HTTP links should be rejected according to the crawler's URL validation rules.
+
+With `maxDepth = 3`, `page7.html` should not be fetched if it is at depth 4 under the dataset's link structure.
+
+Actual results depend on the implementation's depth convention, URL normalization, and asynchronous processing.
+
+## 10. Run Automated Tests
+
+Run the test suite:
+
+```bash
+./mvnw test
+```
+
+Build the project:
+
+```bash
+./mvnw clean package
+```
+
+Review the actual Maven output to confirm whether the tests pass.
+
+## 11. Run with Docker Compose
+
+If your Docker Compose configuration includes the Spring Boot application service:
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs -f
+```
+
+If the Spring Boot app runs inside Docker, `localhost:9000` refers to the app container itself, not the Ubuntu host. Configure the seed URL to use an address reachable from the container, such as `http://host.docker.internal:9000/page1.html` where supported, and configure host-gateway networking if necessary.
+
+If Compose only defines Redis, run the Python dataset server and Spring Boot application separately as described above.
+
+## 12. JMeter Load Testing
+
+Install Apache JMeter using your preferred Ubuntu installation method and ensure the `jmeter` command is available on your `PATH`.
+
+From the project directory:
+
+```bash
+cd ~/Documents/sem5/System-design/webcrawler/jmeter
+jmeter -n \
+  -t webcrawler_test_plan.jmx \
+  -Jhost=localhost \
+  -Jport=8081 \
+  -Jthreads=25 \
+  -Jrampup=5 \
+  -Jloops=10 \
+  -l results.jtl \
+  -e \
+  -o dashboard-report
+```
+
+The test results are written to `results.jtl`, and the HTML report is generated in `dashboard-report`.
+
+Ensure the output directory does not already exist before generating the report. Do not treat the configured thread count as a measured performance result; use the generated JMeter report to evaluate actual results.
+
+## Troubleshooting
+
+### Redis port conflict
+
+```bash
+sudo ss -ltnp | grep ':6379'
+docker ps --filter "publish=6379"
+```
+
+Resolve the port conflict or change the host port mapping and Spring Boot Redis configuration.
+
+### Docker is not running
+
+```bash
+docker info
+docker compose ps
+```
+
+Start Docker Engine using your Ubuntu installation's service configuration if necessary.
+
+### Python server is unavailable
+
+```bash
+python3 --version
+curl -I http://localhost:9000/page1.html
+```
+
+Confirm that the dataset server is running in Terminal 2 and that `crawler_dataset/` exists.
+
+### Spring Boot application is unavailable
+
+```bash
+curl -i http://localhost:8081/crawler/health
+```
+
+Inspect the Spring Boot terminal for startup failures or port conflicts.
+
+### Unsupported Content-Type
+
+Ensure the request sends:
+
+```text
+Content-Type: application/json
+```
+
+When using `curl`, include:
+
+```bash
+-H "Content-Type: application/json"
+```
+
+### Integer field parsing errors
+
+Provide numeric values for all required integer fields, including:
+
+```json
+{
+  "maxPages": 15,
+  "maxDepth": 3,
+  "requestTimeoutMs": 5000,
+  "politenessDelayMs": 50
+}
+```
+
+Do not send `null` for required primitive integer fields.
+
+### Job metadata is IDLE or contains null fields
+
+If a start request returns default metadata such as `status: IDLE`, `seedUrl: null`, `maxPages: 0`, or `maxDepth: 0`, verify the request DTO mapping and job initialization.
+
+Trace the request through:
+
+1. JSON deserialization
+2. `CrawlerController`
+3. `CrawlRequest`
+4. Job initialization
+5. Redis state storage
+6. Response serialization
+7. Asynchronous crawl execution
+
+Try a new job ID to avoid confusing stale state with a new request. If the problem persists, fix the mapping or initialization logic and add a regression test verifying that the submitted seed URL, job ID, limits, and domain are persisted and that asynchronous crawling starts.
+
+## 13. Stop the Services
+
+Stop the Python HTTP server and Spring Boot application with `Ctrl+C` in their respective terminals.
+
+Stop Redis:
+
+```bash
+docker compose stop redis
+```
+
+To stop the full Compose stack, if applicable:
+
+```bash
+docker compose down
+```
+
+## Verification Checklist
+
+- [ ] Redis starts and responds with `PONG`.
+- [ ] The local dataset is accessible on port `9000`.
+- [ ] Spring Boot starts on port `8081`.
+- [ ] The health endpoint responds successfully.
+- [ ] A crawl request creates and initializes the expected job.
+- [ ] Job metadata contains the submitted configuration.
+- [ ] BFS traversal discovers and visits expected URLs.
+- [ ] Depth and page limits are respected.
+- [ ] Failed URLs are tracked.
+- [ ] Postman requests return the expected results.
+- [ ] Maven tests and packaging complete successfully.
+- [ ] JMeter results are reviewed if load testing is required.
+
+**Note:** Verify endpoint paths, request DTO fields, Redis configuration, container names, and project structure against the current checkout. The commands above assume the previously described implementation and are not a claim that the project has been independently tested on Ubuntu.
