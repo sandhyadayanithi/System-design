@@ -54,9 +54,9 @@ The application expects up to 4 independent MongoDB instances running on host po
 - **Bash (Linux/macOS)**:
   ```bash
   docker run -d --name ch-mongo1 -p 27017:27017 mongo:latest
-  docker run -d --name ch-mongo2 -p 27018:27018 mongo:latest
-  docker run -d --name ch-mongo3 -p 27019:27019 mongo:latest
-  docker run -d --name ch-mongo4 -p 27020:27020 mongo:latest
+  docker run -d --name ch-mongo2 -p 27018:27017 mongo:latest
+  docker run -d --name ch-mongo3 -p 27019:27017 mongo:latest
+  docker run -d --name ch-mongo4 -p 27020:27027 mongo:latest
   ```
 
 #### 3. Verify MongoDB Services are Running
