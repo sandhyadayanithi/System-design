@@ -1,28 +1,34 @@
 package com.example.webcrawler.service;
 
+import com.example.webcrawler.model.CrawlTask;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-
+/**
+ * Backward-compatible URL queue wrapper delegating to RedisCrawlStateService.
+ */
 @Component
 public class UrlQueue {
 
-    private final BlockingQueue<String> queue = new LinkedBlockingQueue<>();
+    private final RedisCrawlStateService stateService;
+
+    public UrlQueue(RedisCrawlStateService stateService) {
+        this.stateService = stateService;
+    }
 
     public void add(String url) {
-        queue.offer(url);
+        stateService.enqueue(stateService.getLatestJobId(), new CrawlTask(url, 0, null));
     }
 
     public String getNext() {
-        return queue.poll();
+        CrawlTask task = stateService.dequeue(stateService.getLatestJobId());
+        return task != null ? task.getUrl() : null;
     }
 
     public int size() {
-        return queue.size();
+        return stateService.getQueueSize(stateService.getLatestJobId());
     }
 
     public void clear() {
-        queue.clear();
+        // Handled via clearJobState
     }
 }

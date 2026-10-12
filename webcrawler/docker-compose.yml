@@ -1,10 +1,18 @@
 services:
 
   redis:
-    image: redis:latest
+    image: redis:7-alpine
     container_name: webcrawler-redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: always
 
   webcrawler:
     build: .
@@ -15,4 +23,9 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  redis-data:

@@ -1,9 +1,14 @@
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\config\RedisConfig.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\controller\CrawlerController.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\model\CrawlStatus.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\service\CrawlerService.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\service\CrawlStateService.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\service\UrlQueue.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\service\UrlValidator.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\service\VisitedUrlService.java
-C:\Users\shrut\Desktop\sem 5\system design\webcrawler\webcrawler\src\main\java\com\example\webcrawler\WebcrawlerApplication.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\config\RedisConfig.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\controller\CrawlerController.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\model\CrawlJobDetails.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\model\CrawlRequest.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\model\CrawlStatus.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\model\CrawlTask.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\model\PagedResponse.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\service\CrawlerService.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\service\CrawlStateService.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\service\RedisCrawlStateService.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\service\UrlQueue.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\service\UrlValidator.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\service\VisitedUrlService.java
+C:\Users\sandh\Documents\sem5\System-design\webcrawler\src\main\java\com\example\webcrawler\WebcrawlerApplication.java

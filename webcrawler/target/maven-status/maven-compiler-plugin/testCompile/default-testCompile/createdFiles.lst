@@ -1,1 +1,4 @@
+com\example\webcrawler\controller\CrawlerControllerTest.class
+com\example\webcrawler\service\UrlValidatorTest.class
+com\example\webcrawler\service\RedisCrawlStateServiceTest.class
 com\example\webcrawler\WebcrawlerApplicationTests.class

@@ -1,50 +1,42 @@
 package com.example.webcrawler.service;
 
+import com.example.webcrawler.model.CrawlJobDetails;
 import com.example.webcrawler.model.CrawlStatus;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Backward-compatible service wrapper delegating to RedisCrawlStateService.
+ */
 @Service
 public class CrawlStateService {
 
-    private static final String DISCOVERED_KEY = "crawler:discovered";
-    private static final String STATUS_KEY = "crawler:status";
+    private final RedisCrawlStateService stateService;
 
-    private final RedisTemplate<String, String> redisTemplate;
-
-    public CrawlStateService(RedisTemplate<String, String> redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public CrawlStateService(RedisCrawlStateService stateService) {
+        this.stateService = stateService;
     }
 
     public void markDiscovered(String url) {
-        redisTemplate.opsForSet().add(DISCOVERED_KEY, url);
+        stateService.markDiscoveredAtomic(stateService.getLatestJobId(), url);
     }
 
     public Set<String> getDiscoveredUrls() {
-        return redisTemplate.opsForSet().members(DISCOVERED_KEY);
+        return new HashSet<>(stateService.getDiscoveredUrls(stateService.getLatestJobId()));
     }
 
     public void setStatus(CrawlStatus status) {
-        redisTemplate.opsForValue()
-                .set(STATUS_KEY, status.name());
+        stateService.setStatus(stateService.getLatestJobId(), status, null);
     }
 
     public CrawlStatus getStatus() {
-
-        String status = redisTemplate.opsForValue()
-                .get(STATUS_KEY);
-
-        if (status == null) {
-            return CrawlStatus.IDLE;
-        }
-
-        return CrawlStatus.valueOf(status);
+        CrawlJobDetails details = stateService.getJobDetails(stateService.getLatestJobId());
+        return details != null ? details.getStatus() : CrawlStatus.IDLE;
     }
 
     public void clearState() {
-        redisTemplate.delete(DISCOVERED_KEY);
-        redisTemplate.delete(STATUS_KEY);
+        stateService.clearJobState(stateService.getLatestJobId());
     }
 }

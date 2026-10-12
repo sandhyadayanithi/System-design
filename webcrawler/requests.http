@@ -1,22 +1,50 @@
-### Clear crawler state
-DELETE http://localhost:8081/crawler/state
+### 1. Health check
+GET http://localhost:8081/crawler/health
 
+### 2. Start crawler with query parameters (Depth 3, Max 50 pages)
+POST http://localhost:8081/crawler/start?seedUrl=http://localhost:9000/page1.html&maxPages=20&maxDepth=3&allowedDomain=localhost
 
-### Start crawler
-POST http://localhost:8081/crawler/start?seedUrl=http://host.docker.internal:9000/page1.html
+### 3. Start crawler with JSON body and custom job ID
+POST http://localhost:8081/crawler/start
+Content-Type: application/json
 
+{
+  "seedUrl": "http://localhost:9000/page1.html",
+  "jobId": "lab-demo-job",
+  "maxPages": 25,
+  "maxDepth": 3,
+  "allowedDomain": "localhost",
+  "stayOnDomain": true,
+  "requestTimeoutMs": 3000,
+  "politenessDelayMs": 50
+}
 
-### Check crawler status
+### 4. Check status of current / latest job
 GET http://localhost:8081/crawler/status
 
+### 5. Check specific job details & live progress
+GET http://localhost:8081/crawler/jobs/lab-demo-job
 
-### Get visited URLs
-GET http://localhost:8081/crawler/visited
+### 6. Check specific job status only
+GET http://localhost:8081/crawler/jobs/lab-demo-job/status
 
+### 7. List all registered crawl jobs
+GET http://localhost:8081/crawler/jobs
 
-### Get discovered URLs
-GET http://localhost:8081/crawler/discovered
+### 8. Get visited URLs (with pagination)
+GET http://localhost:8081/crawler/visited?jobId=lab-demo-job&page=0&size=10
 
+### 9. Get discovered URLs (with pagination)
+GET http://localhost:8081/crawler/discovered?jobId=lab-demo-job&page=0&size=10
 
-### Health check
-GET http://localhost:8081/crawler/health
+### 10. Inspect pending URLs in the frontier queue
+GET http://localhost:8081/crawler/queue?jobId=lab-demo-job
+
+### 11. Inspect failed URLs and HTTP error reasons
+GET http://localhost:8081/crawler/failed?jobId=lab-demo-job
+
+### 12. Clear state for a specific job
+DELETE http://localhost:8081/crawler/jobs/lab-demo-job/state
+
+### 13. Clear legacy default crawler state
+DELETE http://localhost:8081/crawler/state

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Error Demo Page</title>
+</head>
+<body>
+    <h1>Error & Inaccessible Pages Demo</h1>
+    <p>This page contains broken and invalid links to verify the crawler's graceful failure handling.</p>
+
+    <ul>
+        <!-- HTTP 404 target -->
+        <li><a href="does-not-exist-404.html">Inaccessible 404 Target</a></li>
+        <!-- Malformed URI -->
+        <li><a href="http://">Malformed Empty Host</a></li>
+        <!-- Unsupported protocol -->
+        <li><a href="ftp://files.example.com/data.txt">FTP Protocol (Must be ignored)</a></li>
+        <!-- Normal link back to safe page -->
+        <li><a href="page1.html">Safe link back to Page 1</a></li>
+    </ul>
+</body>
+</html>

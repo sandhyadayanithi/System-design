@@ -1,16 +1,23 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Page 2</title>
+    <meta charset="UTF-8">
+    <title>Page 2 (Depth 1)</title>
 </head>
 <body>
+    <h1 id="overview">Web Crawler Test Dataset - Page 2</h1>
+    <p>Reached at Depth 1 from Page 1.</p>
 
-<h1>Web Crawler Dataset - Page 2</h1>
-
-<p>This is the second page of the sample crawling dataset.</p>
-
-<a href="page3.html">Go to Page 3</a>
-<a href="page4.html">Go to Page 4</a>
-
+    <h2>Links</h2>
+    <ul>
+        <!-- Link to depth 2 -->
+        <li><a href="page4.html">Page 4 (Depth 2)</a></li>
+        <!-- Relative link to subfolder -->
+        <li><a href="section/page5.html">Subdirectory Section - Page 5 (Depth 2)</a></li>
+        <!-- Back-link to seed page to test cycle detection -->
+        <li><a href="page1.html">Back to Page 1 (Cycle Test - Already Visited)</a></li>
+        <!-- Self link to test self-cycle detection -->
+        <li><a href="page2.html">Self Link to Page 2</a></li>
+    </ul>
 </body>
 </html>

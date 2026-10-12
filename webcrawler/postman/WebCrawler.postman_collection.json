@@ -1,0 +1,237 @@
+{
+  "info": {
+    "_postman_id": "c1f7a29e-4e3b-4c28-98f1-webcrawler-v2",
+    "name": "Web Crawler Lab Exercise 8",
+    "description": "Comprehensive Postman test collection for the Distributed Spring Boot Web Crawler with Redis State Management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "seedServer",
+      "value": "http://localhost:9000",
+      "type": "string"
+    },
+    {
+      "key": "testJobId",
+      "value": "postman-lab-job",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "health"]
+        }
+      }
+    },
+    {
+      "name": "2. Start Crawl - Custom Configuration (JSON Body)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"seedUrl\": \"{{seedServer}}/page1.html\",\n  \"jobId\": \"{{testJobId}}\",\n  \"maxPages\": 20,\n  \"maxDepth\": 3,\n  \"allowedDomain\": \"localhost\",\n  \"stayOnDomain\": true,\n  \"requestTimeoutMs\": 3000,\n  \"politenessDelayMs\": 50\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/crawler/start",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "start"]
+        }
+      }
+    },
+    {
+      "name": "3. Get Job Details & Live Progress",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/jobs/{{testJobId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "jobs", "{{testJobId}}"]
+        }
+      }
+    },
+    {
+      "name": "4. Get Current / Latest Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/status?jobId={{testJobId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "status"],
+          "query": [
+            {
+              "key": "jobId",
+              "value": "{{testJobId}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Inspect Visited URLs (Paginated)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/visited?jobId={{testJobId}}&page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "visited"],
+          "query": [
+            {
+              "key": "jobId",
+              "value": "{{testJobId}}"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Inspect Discovered URLs (Paginated)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/discovered?jobId={{testJobId}}&page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "discovered"],
+          "query": [
+            {
+              "key": "jobId",
+              "value": "{{testJobId}}"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "7. Inspect Pending URLs in Frontier Queue",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/queue?jobId={{testJobId}}&page=0&size=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "queue"],
+          "query": [
+            {
+              "key": "jobId",
+              "value": "{{testJobId}}"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "10"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "8. Inspect Inaccessible / Failed URLs",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/failed?jobId={{testJobId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "failed"],
+          "query": [
+            {
+              "key": "jobId",
+              "value": "{{testJobId}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "9. Conflict Test - Attempt Duplicate Concurrent Crawl",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"seedUrl\": \"{{seedServer}}/page1.html\",\n  \"jobId\": \"{{testJobId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/crawler/start",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "start"]
+        }
+      }
+    },
+    {
+      "name": "10. Validation Test - Invalid Seed Scheme",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/start?seedUrl=ftp://invalid-scheme.com",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "start"],
+          "query": [
+            {
+              "key": "seedUrl",
+              "value": "ftp://invalid-scheme.com"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "11. Clear Job State",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/crawler/jobs/{{testJobId}}/state",
+          "host": ["{{baseUrl}}"],
+          "path": ["crawler", "jobs", "{{testJobId}}", "state"]
+        }
+      }
+    }
+  ]
+}

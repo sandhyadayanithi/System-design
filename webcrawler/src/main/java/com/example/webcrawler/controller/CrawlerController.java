@@ -1,72 +1,269 @@
 package com.example.webcrawler.controller;
 
+import com.example.webcrawler.model.CrawlJobDetails;
+import com.example.webcrawler.model.CrawlRequest;
 import com.example.webcrawler.model.CrawlStatus;
-import com.example.webcrawler.service.CrawlStateService;
+import com.example.webcrawler.model.PagedResponse;
 import com.example.webcrawler.service.CrawlerService;
-import com.example.webcrawler.service.VisitedUrlService;
+import com.example.webcrawler.service.RedisCrawlStateService;
+import com.example.webcrawler.service.UrlValidator;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Set;
+import java.util.*;
 
+/**
+ * REST controller for managing asynchronous web crawl jobs,
+ * monitoring progress, inspecting frontier queues, and querying results.
+ */
 @RestController
 @RequestMapping("/crawler")
 public class CrawlerController {
 
     private final CrawlerService crawlerService;
-    private final VisitedUrlService visitedUrlService;
-    private final CrawlStateService crawlStateService;
+    private final RedisCrawlStateService stateService;
+    private final UrlValidator urlValidator;
 
-    public CrawlerController(
-            CrawlerService crawlerService,
-            VisitedUrlService visitedUrlService,
-            CrawlStateService crawlStateService) {
-
+    public CrawlerController(CrawlerService crawlerService,
+                             RedisCrawlStateService stateService,
+                             UrlValidator urlValidator) {
         this.crawlerService = crawlerService;
-        this.visitedUrlService = visitedUrlService;
-        this.crawlStateService = crawlStateService;
+        this.stateService = stateService;
+        this.urlValidator = urlValidator;
     }
 
+    /**
+     * POST /crawler/start
+     * Accepts either URL parameters or a JSON body.
+     */
     @PostMapping("/start")
-    public String startCrawling(
-            @RequestParam String seedUrl) {
+    public ResponseEntity<?> startCrawling(
+            @RequestParam(required = false) String seedUrl,
+            @RequestParam(required = false) String jobId,
+            @RequestParam(required = false, defaultValue = "50") Integer maxPages,
+            @RequestParam(required = false, defaultValue = "3") Integer maxDepth,
+            @RequestParam(required = false) String allowedDomain,
+            @RequestParam(required = false, defaultValue = "true") Boolean stayOnDomain,
+            @RequestBody(required = false) CrawlRequest bodyRequest) {
 
-        crawlerService.crawl(seedUrl);
+        CrawlRequest request;
+        if (bodyRequest != null && bodyRequest.getSeedUrl() != null && !bodyRequest.getSeedUrl().trim().isEmpty()) {
+            request = bodyRequest;
+            if (request.getMaxPages() <= 0) request.setMaxPages(50);
+            if (request.getMaxDepth() < 0) request.setMaxDepth(3);
+            if (request.getRequestTimeoutMs() <= 0) request.setRequestTimeoutMs(4000);
+        } else {
+            if (seedUrl == null || seedUrl.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Bad Request",
+                        "message", "seedUrl is required either as a query parameter or in the request body"
+                ));
+            }
+            request = CrawlRequest.builder()
+                    .seedUrl(seedUrl.trim())
+                    .jobId(jobId)
+                    .maxPages(maxPages != null ? maxPages : 50)
+                    .maxDepth(maxDepth != null ? maxDepth : 3)
+                    .allowedDomain(allowedDomain)
+                    .stayOnDomain(stayOnDomain != null ? stayOnDomain : true)
+                    .build();
+        }
 
-        return "Crawling started";
+        if (!urlValidator.isValid(request.getSeedUrl())) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid URL",
+                    "message", "Seed URL must be a valid HTTP or HTTPS address"
+            ));
+        }
+
+        String assignedJobId = (request.getJobId() != null && !request.getJobId().trim().isEmpty())
+                ? request.getJobId().trim()
+                : "job-" + UUID.randomUUID().toString().substring(0, 8);
+        request.setJobId(assignedJobId);
+
+        if (stateService.isJobRunning(assignedJobId)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "error", "Conflict",
+                    "message", "Crawl job " + assignedJobId + " is already running"
+            ));
+        }
+
+        // Start asynchronously
+        crawlerService.crawl(request);
+
+        CrawlJobDetails initialDetails = stateService.getJobDetails(assignedJobId);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(initialDetails);
     }
 
+    /**
+     * GET /crawler/status
+     * Returns progress and status of the specified or latest job.
+     */
     @GetMapping("/status")
-    public CrawlStatus getStatus() {
-
-        return crawlerService.getStatus();
+    public ResponseEntity<CrawlJobDetails> getStatus(@RequestParam(required = false) String jobId) {
+        String targetJobId = resolveJobId(jobId);
+        CrawlJobDetails details = stateService.getJobDetails(targetJobId);
+        return ResponseEntity.ok(details);
     }
 
+    /**
+     * GET /crawler/jobs/{jobId}
+     * Returns full metadata, metrics, and progress for a specific job.
+     */
+    @GetMapping("/jobs/{jobId}")
+    public ResponseEntity<CrawlJobDetails> getJob(@PathVariable String jobId) {
+        CrawlJobDetails details = stateService.getJobDetails(jobId);
+        return ResponseEntity.ok(details);
+    }
+
+    /**
+     * GET /crawler/jobs/{jobId}/status
+     * Returns just the CrawlStatus enum value.
+     */
+    @GetMapping("/jobs/{jobId}/status")
+    public ResponseEntity<Map<String, Object>> getJobStatusOnly(@PathVariable String jobId) {
+        CrawlJobDetails details = stateService.getJobDetails(jobId);
+        return ResponseEntity.ok(Map.of(
+                "jobId", details.getJobId(),
+                "status", details.getStatus(),
+                "visited", details.getPagesVisited(),
+                "discovered", details.getPagesDiscovered(),
+                "durationMs", details.getDurationMs() != null ? details.getDurationMs() : 0
+        ));
+    }
+
+    /**
+     * GET /crawler/jobs
+     * Lists all registered job IDs.
+     */
+    @GetMapping("/jobs")
+    public ResponseEntity<Map<String, Object>> listJobs() {
+        Set<String> jobs = stateService.listAllJobs();
+        return ResponseEntity.ok(Map.of(
+                "count", jobs.size(),
+                "latestJobId", stateService.getLatestJobId(),
+                "jobs", jobs
+        ));
+    }
+
+    /**
+     * GET /crawler/visited
+     * Paginated list of visited URLs.
+     */
     @GetMapping("/visited")
-    public Set<String> getVisitedUrls() {
+    public ResponseEntity<?> getVisitedUrls(
+            @RequestParam(required = false) String jobId,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size) {
 
-        return visitedUrlService.getVisitedUrls();
+        String targetJobId = resolveJobId(jobId);
+        List<String> visited = stateService.getVisitedUrls(targetJobId);
+
+        // If pagination parameters are default and size == 0, return simple list for backward compatibility
+        if (size <= 0) {
+            return ResponseEntity.ok(visited);
+        }
+        return ResponseEntity.ok(PagedResponse.of(visited, page, size));
     }
 
+    /**
+     * GET /crawler/discovered
+     * Paginated list of discovered URLs.
+     */
     @GetMapping("/discovered")
-    public Set<String> getDiscoveredUrls() {
+    public ResponseEntity<?> getDiscoveredUrls(
+            @RequestParam(required = false) String jobId,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size) {
 
-        return crawlStateService.getDiscoveredUrls();
+        String targetJobId = resolveJobId(jobId);
+        List<String> discovered = stateService.getDiscoveredUrls(targetJobId);
+
+        if (size <= 0) {
+            return ResponseEntity.ok(discovered);
+        }
+        return ResponseEntity.ok(PagedResponse.of(discovered, page, size));
     }
 
+    /**
+     * GET /crawler/queue
+     * Paginated list of pending URLs waiting in the frontier queue.
+     */
+    @GetMapping("/queue")
+    public ResponseEntity<?> getQueueUrls(
+            @RequestParam(required = false) String jobId,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size) {
+
+        String targetJobId = resolveJobId(jobId);
+        List<String> queue = stateService.getQueueUrls(targetJobId);
+
+        if (size <= 0) {
+            return ResponseEntity.ok(queue);
+        }
+        return ResponseEntity.ok(PagedResponse.of(queue, page, size));
+    }
+
+    /**
+     * GET /crawler/failed
+     * Map of URLs that failed during retrieval and their error reasons.
+     */
+    @GetMapping("/failed")
+    public ResponseEntity<Map<String, Object>> getFailedUrls(@RequestParam(required = false) String jobId) {
+        String targetJobId = resolveJobId(jobId);
+        Map<String, String> failed = stateService.getFailedUrls(targetJobId);
+        return ResponseEntity.ok(Map.of(
+                "jobId", targetJobId,
+                "failedCount", failed.size(),
+                "failures", failed
+        ));
+    }
+
+    /**
+     * DELETE /crawler/jobs/{jobId}/state
+     * Clears all state and Redis keys associated with a specific job.
+     */
+    @DeleteMapping("/jobs/{jobId}/state")
+    public ResponseEntity<Map<String, String>> clearJobState(@PathVariable String jobId) {
+        stateService.clearJobState(jobId);
+        return ResponseEntity.ok(Map.of(
+                "message", "State cleared for job " + jobId,
+                "jobId", jobId
+        ));
+    }
+
+    /**
+     * Legacy DELETE endpoints for backward compatibility.
+     */
     @DeleteMapping("/visited")
-    public String clearVisitedUrls() {
-
-        visitedUrlService.clearVisitedUrls();
-
-        return "Visited URL set cleared";
+    public ResponseEntity<Map<String, String>> clearVisitedUrls() {
+        stateService.clearJobState(stateService.getLatestJobId());
+        return ResponseEntity.ok(Map.of("message", "Visited URL set cleared"));
     }
 
     @DeleteMapping("/state")
-    public String clearCrawlerState() {
+    public ResponseEntity<Map<String, String>> clearCrawlerState() {
+        stateService.clearJobState(stateService.getLatestJobId());
+        return ResponseEntity.ok(Map.of("message", "Crawler state cleared"));
+    }
 
-        visitedUrlService.clearVisitedUrls();
-        crawlStateService.clearState();
+    /**
+     * GET /crawler/health
+     * Health check endpoint confirming crawler and Redis connectivity.
+     */
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {
+        boolean redisUp = stateService.isRedisAvailable();
+        return ResponseEntity.ok(Map.of(
+                "status", "UP",
+                "redisConnected", redisUp,
+                "activeJobs", stateService.listAllJobs().size(),
+                "latestJobId", stateService.getLatestJobId()
+        ));
+    }
 
-        return "Crawler state cleared";
+    private String resolveJobId(String jobId) {
+        return (jobId != null && !jobId.trim().isEmpty()) ? jobId.trim() : stateService.getLatestJobId();
     }
 }

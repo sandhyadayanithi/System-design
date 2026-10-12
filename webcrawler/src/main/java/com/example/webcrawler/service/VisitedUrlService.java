@@ -1,45 +1,35 @@
 package com.example.webcrawler.service;
 
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Backward-compatible service wrapper delegating to RedisCrawlStateService.
+ */
 @Service
 public class VisitedUrlService {
 
-    private static final String VISITED_KEY = "crawler:visited";
+    private final RedisCrawlStateService stateService;
 
-    private final RedisTemplate<String, String> redisTemplate;
-
-    public VisitedUrlService(RedisTemplate<String, String> redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public VisitedUrlService(RedisCrawlStateService stateService) {
+        this.stateService = stateService;
     }
 
     public boolean isVisited(String url) {
-
-        Boolean result = redisTemplate.opsForSet()
-                .isMember(VISITED_KEY, url);
-
-        return Boolean.TRUE.equals(result);
+        return stateService.isVisited(stateService.getLatestJobId(), url);
     }
 
     public void markVisited(String url) {
-
-        redisTemplate.opsForSet()
-                .add(VISITED_KEY, url);
+        stateService.markVisitedAtomic(stateService.getLatestJobId(), url);
     }
 
     public Set<String> getVisitedUrls() {
-
-        Set<String> urls = redisTemplate.opsForSet()
-                .members(VISITED_KEY);
-
-        return urls;
+        return new HashSet<>(stateService.getVisitedUrls(stateService.getLatestJobId()));
     }
 
     public void clearVisitedUrls() {
-
-        redisTemplate.delete(VISITED_KEY);
+        stateService.clearJobState(stateService.getLatestJobId());
     }
 }

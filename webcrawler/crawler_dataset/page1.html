@@ -1,16 +1,31 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Page 1</title>
+    <meta charset="UTF-8">
+    <title>Seed Page - Page 1 (Depth 0)</title>
 </head>
 <body>
+    <h1>Web Crawler Test Dataset - Seed Page 1</h1>
+    <p>This is the entry point (Depth 0) for automated web content discovery.</p>
 
-<h1>Web Crawler Dataset - Page 1</h1>
-
-<p>This is the first page of the sample crawling dataset.</p>
-
-<a href="page2.html">Go to Page 2</a>
-<a href="page3.html">Go to Page 3</a>
-
+    <h2>Outbound Links</h2>
+    <ul>
+        <!-- Normal relative links to depth 1 -->
+        <li><a href="page2.html">Page 2 (Depth 1)</a></li>
+        <li><a href="page3.html">Page 3 (Depth 1)</a></li>
+        <!-- Duplicate link (to test deduplication) -->
+        <li><a href="page2.html">Duplicate link to Page 2</a></li>
+        <!-- Link with fragment / anchor (to test normalization) -->
+        <li><a href="page2.html#overview">Page 2 with Anchor Fragment (#overview)</a></li>
+        <!-- Link with query parameter (to test normalization/handling) -->
+        <li><a href="page3.html?ref=seed_page">Page 3 with Query Parameter (?ref=seed_page)</a></li>
+        <!-- Link to error testing page -->
+        <li><a href="error-demo.html">Error & Edge Cases Demo Page</a></li>
+        <!-- External domain link (to test domain restriction filter) -->
+        <li><a href="https://external-forbidden-domain.com/blocked.html">External Domain Link (Must be filtered out when domain-restricted)</a></li>
+        <!-- Non-HTTP link (to test protocol scheme validation) -->
+        <li><a href="mailto:admin@example.com">Email Link (mailto: filter test)</a></li>
+        <li><a href="javascript:void(0)">JavaScript Link (javascript: filter test)</a></li>
+    </ul>
 </body>
 </html>
