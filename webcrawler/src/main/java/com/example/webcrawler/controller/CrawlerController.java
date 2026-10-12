@@ -48,11 +48,28 @@ public class CrawlerController {
             @RequestBody(required = false) CrawlRequest bodyRequest) {
 
         CrawlRequest request;
-        if (bodyRequest != null && bodyRequest.getSeedUrl() != null && !bodyRequest.getSeedUrl().trim().isEmpty()) {
+        if (bodyRequest != null) {
+            String validationError = bodyRequest.validate();
+            if (validationError != null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Bad Request",
+                        "message", validationError
+                ));
+            }
+
+            if (bodyRequest.getSeedUrl() == null || bodyRequest.getSeedUrl().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Bad Request",
+                        "message", "seedUrl is required either as a query parameter or in the request body"
+                ));
+            }
+
             request = bodyRequest;
-            if (request.getMaxPages() <= 0) request.setMaxPages(50);
-            if (request.getMaxDepth() < 0) request.setMaxDepth(3);
-            if (request.getRequestTimeoutMs() <= 0) request.setRequestTimeoutMs(4000);
+            if (request.getMaxPages() == null) request.setMaxPages(CrawlRequest.DEFAULT_MAX_PAGES);
+            if (request.getMaxDepth() == null) request.setMaxDepth(CrawlRequest.DEFAULT_MAX_DEPTH);
+            if (request.getRequestTimeoutMs() == null) request.setRequestTimeoutMs(CrawlRequest.DEFAULT_REQUEST_TIMEOUT_MS);
+            if (request.getPolitenessDelayMs() == null) request.setPolitenessDelayMs(CrawlRequest.DEFAULT_POLITENESS_DELAY_MS);
+            if (request.getStayOnDomain() == null) request.setStayOnDomain(CrawlRequest.DEFAULT_STAY_ON_DOMAIN);
         } else {
             if (seedUrl == null || seedUrl.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
@@ -60,13 +77,25 @@ public class CrawlerController {
                         "message", "seedUrl is required either as a query parameter or in the request body"
                 ));
             }
+            if (maxPages != null && maxPages <= 0) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Bad Request",
+                        "message", "maxPages must be greater than 0"
+                ));
+            }
+            if (maxDepth != null && maxDepth < 0) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Bad Request",
+                        "message", "maxDepth must be greater than or equal to 0"
+                ));
+            }
             request = CrawlRequest.builder()
                     .seedUrl(seedUrl.trim())
                     .jobId(jobId)
-                    .maxPages(maxPages != null ? maxPages : 50)
-                    .maxDepth(maxDepth != null ? maxDepth : 3)
+                    .maxPages(maxPages != null ? maxPages : CrawlRequest.DEFAULT_MAX_PAGES)
+                    .maxDepth(maxDepth != null ? maxDepth : CrawlRequest.DEFAULT_MAX_DEPTH)
                     .allowedDomain(allowedDomain)
-                    .stayOnDomain(stayOnDomain != null ? stayOnDomain : true)
+                    .stayOnDomain(stayOnDomain != null ? stayOnDomain : CrawlRequest.DEFAULT_STAY_ON_DOMAIN)
                     .build();
         }
 
@@ -265,5 +294,32 @@ public class CrawlerController {
 
     private String resolveJobId(String jobId) {
         return (jobId != null && !jobId.trim().isEmpty()) ? jobId.trim() : stateService.getLatestJobId();
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleHttpMessageNotReadable(
+            org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        String message = "Invalid request payload or malformed field";
+        Throwable root = ex.getMostSpecificCause();
+        if (root != null && root.getMessage() != null) {
+            String raw = root.getMessage();
+            int idx = raw.indexOf('\n');
+            if (idx > 0) raw = raw.substring(0, idx);
+            message = raw.trim();
+        }
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Bad Request",
+                "message", message,
+                "status", 400
+        ));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Bad Request",
+                "message", ex.getMessage(),
+                "status", 400
+        ));
     }
 }

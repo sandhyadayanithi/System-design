@@ -9,9 +9,12 @@ import com.example.webcrawler.service.UrlValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class CrawlerControllerTest {
 
@@ -27,6 +33,7 @@ class CrawlerControllerTest {
     private RedisCrawlStateService stateService;
     private UrlValidator urlValidator;
     private CrawlerController controller;
+    private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
@@ -34,6 +41,7 @@ class CrawlerControllerTest {
         stateService = mock(RedisCrawlStateService.class);
         urlValidator = new UrlValidator();
         controller = new CrawlerController(crawlerService, stateService, urlValidator);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
     @Test
@@ -83,6 +91,126 @@ class CrawlerControllerTest {
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         verify(crawlerService, never()).crawl(any(CrawlRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /crawler/start with JSON body containing omitted numeric fields uses defaults")
+    void testJsonBodyOmittedNumericFields() throws Exception {
+        when(stateService.isJobRunning(anyString())).thenReturn(false);
+        when(stateService.getJobDetails(anyString())).thenReturn(
+                CrawlJobDetails.builder().jobId("test-omitted").status(CrawlStatus.RUNNING).build()
+        );
+
+        String json = """
+            {
+                "seedUrl": "http://localhost:9000/page1.html",
+                "jobId": "test-omitted"
+            }
+            """;
+
+        mockMvc.perform(post("/crawler/start")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isAccepted());
+
+        ArgumentCaptor<CrawlRequest> captor = ArgumentCaptor.forClass(CrawlRequest.class);
+        verify(crawlerService, times(1)).crawl(captor.capture());
+        CrawlRequest captured = captor.getValue();
+        assertEquals(50, captured.getMaxPages());
+        assertEquals(3, captured.getMaxDepth());
+        assertEquals(4000, captured.getRequestTimeoutMs());
+        assertEquals(50L, captured.getPolitenessDelayMs());
+        assertTrue(captured.isStayOnDomain());
+    }
+
+    @Test
+    @DisplayName("POST /crawler/start with explicitly null maxPages returns HTTP 400 validation error")
+    void testJsonBodyExplicitNullMaxPages() throws Exception {
+        String json = """
+            {
+                "seedUrl": "http://localhost:9000/page1.html",
+                "maxPages": null
+            }
+            """;
+
+        mockMvc.perform(post("/crawler/start")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("maxPages cannot be null"));
+
+        verify(crawlerService, never()).crawl(any(CrawlRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /crawler/start with explicitly null maxDepth returns HTTP 400 validation error")
+    void testJsonBodyExplicitNullMaxDepth() throws Exception {
+        String json = """
+            {
+                "seedUrl": "http://localhost:9000/page1.html",
+                "maxDepth": null
+            }
+            """;
+
+        mockMvc.perform(post("/crawler/start")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("maxDepth cannot be null"));
+
+        verify(crawlerService, never()).crawl(any(CrawlRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /crawler/start with invalid negative maxPages returns HTTP 400")
+    void testJsonBodyInvalidNegativeMaxPages() throws Exception {
+        String json = """
+            {
+                "seedUrl": "http://localhost:9000/page1.html",
+                "maxPages": -5
+            }
+            """;
+
+        mockMvc.perform(post("/crawler/start")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("maxPages must be greater than 0"));
+
+        verify(crawlerService, never()).crawl(any(CrawlRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /crawler/start with valid custom numeric fields passes correctly")
+    void testJsonBodyValidCustomNumericFields() throws Exception {
+        when(stateService.isJobRunning(anyString())).thenReturn(false);
+        when(stateService.getJobDetails(anyString())).thenReturn(
+                CrawlJobDetails.builder().jobId("test-custom").status(CrawlStatus.RUNNING).build()
+        );
+
+        String json = """
+            {
+                "seedUrl": "http://localhost:9000/page1.html",
+                "jobId": "test-custom",
+                "maxPages": 25,
+                "maxDepth": 4,
+                "requestTimeoutMs": 2500,
+                "politenessDelayMs": 100
+            }
+            """;
+
+        mockMvc.perform(post("/crawler/start")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isAccepted());
+
+        ArgumentCaptor<CrawlRequest> captor = ArgumentCaptor.forClass(CrawlRequest.class);
+        verify(crawlerService, times(1)).crawl(captor.capture());
+        CrawlRequest captured = captor.getValue();
+        assertEquals(25, captured.getMaxPages());
+        assertEquals(4, captured.getMaxDepth());
+        assertEquals(2500, captured.getRequestTimeoutMs());
+        assertEquals(100L, captured.getPolitenessDelayMs());
     }
 
     @Test
